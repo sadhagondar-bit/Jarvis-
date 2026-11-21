@@ -96,7 +96,7 @@ body[data-s=speak] .r3{border-left-color:var(--warm)}
 <script>
 const $=s=>document.querySelector(s);
 const ls=(k,v)=>{try{return v===undefined?localStorage.getItem(k):localStorage.setItem(k,v)}catch(e){}};
-const S={key:'',model:'gemini-flash-latest',lang:'en-IN',voice:'',rate:1,pitch:1,convo:true};
+const S={key:'',model:'gemini-3.5-flash-lite',lang:'en-IN',voice:'',rate:1,pitch:1,convo:true};
 try{Object.assign(S,JSON.parse(ls('jarvis2')||'{}'))}catch(e){}
 const save=()=>ls('jarvis2',JSON.stringify(S));
 let hist=[];try{hist=JSON.parse(ls('jarvis_hist')||'[]')}catch(e){}
@@ -139,15 +139,24 @@ function speak(text,done){
     if(i>=parts.length){done();return}
     const u=new SpeechSynthesisUtterance(parts[i++]);
     u.lang=S.lang;u.rate=S.rate;u.pitch=S.pitch;
-    const v=pickVoice();if(v)u.voice=v;
-    u.onstart=()=>setState('speak');
-    u.onend=next;u.onerror=next;
+    if(S.voice){const v=pickVoice();if(v)u.voice=v}
+    let started=false;
+    const w=setTimeout(()=>{
+      if(id===spk&&!started){spk++;try{speechSynthesis.cancel()}catch(e){}add('I couldn’t speak out loud. Open Settings and try another voice.','j');done()}
+    },4000);
+    u.onstart=()=>{started=true;clearTimeout(w);setState('speak')};
+    u.onend=()=>{clearTimeout(w);next()};
+    u.onerror=e=>{
+      clearTimeout(w);
+      if(id===spk&&e.error&&!/interrupted|canceled/.test(e.error)&&i===1)add('Voice problem ('+e.error+'). Open Settings and try another voice.','j');
+      next();
+    };
     speechSynthesis.speak(u);
   };
   setTimeout(next,60);
 }
 function reply(r){
-  const c=clean(r);add(c,'j');busy=true;
+  const c=clean(String(r));add(c,'j');busy=true;setState('speak');
   speak(c,()=>{busy=false;if(S.convo)listen();else setState('idle')});
 }
 
@@ -188,23 +197,31 @@ const ctx=()=>{const h=hist.slice(-20);while(h.length&&h[0].role!=='user')h.shif
 function errText(j){
   const m=(j.error&&j.error.message)||'';
   if(/API key/i.test(m))return 'That API key doesn’t look right. Please check it in Settings.';
-  if(j.error&&j.error.code===429)return 'I’ve reached the free limit for the moment. Give me a minute and try again.';
+  if(j.error&&j.error.code===429)return 'I’ve reached the free limit for the moment. Give me a minute, or pick another model in Settings.';
   return 'I couldn’t get an answer just now. '+m.slice(0,120);
+}
+async function post(m,body){
+  const ac=new AbortController(),tm=setTimeout(()=>ac.abort(),15000);
+  try{
+    const r=await fetch('https://generativelanguage.googleapis.com/v1beta/models/'+m+':generateContent',{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':S.key},body,signal:ac.signal});
+    return await r.json();
+  }finally{clearTimeout(tm)}
 }
 async function ask(q){
   hist.push({role:'user',parts:[{text:q}]});
-  const body=JSON.stringify({systemInstruction:{parts:[{text:SYS()}]},contents:ctx(),generationConfig:{temperature:0.8,maxOutputTokens:2048}});
   let last='';
   try{
-    for(const m of [...new Set([S.model,'gemini-2.5-flash','gemini-2.0-flash'])]){
-      const r=await fetch('https://generativelanguage.googleapis.com/v1beta/models/'+m+':generateContent',{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':S.key},body});
-      const j=await r.json();
+    const body=JSON.stringify({systemInstruction:{parts:[{text:SYS()}]},contents:ctx(),generationConfig:{maxOutputTokens:1024}});
+    for(const m of [...new Set([S.model,'gemini-3.5-flash-lite','gemini-3.8-flash'])]){
+      let j;
+      try{j=await post(m,body)}
+      catch(e){last=e.name==='AbortError'?'The AI took too long to answer. Check your internet connection and try again.':'I can’t reach the AI service: '+e.message;continue}
       const a=(j.candidates?.[0]?.content?.parts||[]).map(p=>p.text||'').join('').trim();
       if(a){hist.push({role:'model',parts:[{text:a}]});saveHist();return a}
-      last=j.error?errText(j):'';
-      if(!(j.error&&j.error.code===404))break;
+      last=j.error?errText(j):'The AI sent an empty answer.';
+      if(!(j.error&&(j.error.code===404||j.error.code===503)))break;
     }
-  }catch(e){last='I can’t reach the internet right now.'}
+  }catch(e){last='Something went wrong: '+e.message}
   hist.pop();
   return last||'I didn’t get an answer. Please try again.';
 }
@@ -215,14 +232,18 @@ async function handle(raw){
   const my=++turn;busy=true;
   try{rec&&rec.abort()}catch(e){}
   add(t,'u');setState('think');
+  const slow=setTimeout(()=>{if(my===turn)$('#stat').textContent='Still thinking…'},5000);
   let r=null;
-  try{r=await local(t.toLowerCase().replace(/[.,!?]+$/,''))}catch(e){}
-  if(r===null){
-    if(!S.key){r='To talk with you properly I need my AI brain. Open Settings and paste your free Gemini key. The steps are right there.';$('#set').classList.add('on')}
-    else r=await ask(t);
-  }
+  try{
+    try{r=await local(t.toLowerCase().replace(/[.,!?]+$/,''))}catch(e){}
+    if(r===null){
+      if(!S.key){r='To talk with you properly I need my AI brain. Open Settings and paste your free Gemini key. The steps are right there.';$('#set').classList.add('on')}
+      else r=await ask(t);
+    }
+  }catch(e){r='Something went wrong: '+e.message}
+  clearTimeout(slow);
   if(my!==turn)return;
-  reply(r);
+  try{reply(r)}catch(e){add('Error: '+e.message,'j');busy=false;setState('idle')}
 }
 function listen(){
   if(!SR){add('Voice input needs Chrome on Android. You can still type to me.','j');setState('idle');return}
@@ -265,7 +286,7 @@ $('#key').oninput=e=>{
   const had=!!S.key;S.key=e.target.value.trim();save();
   if(!had&&S.key.length>25){add('Brain connected. Tap the orb and tell me what’s on your mind.','j');$('#set').classList.remove('on')}
 };
-$('#model').onchange=e=>{S.model=e.target.value.trim()||'gemini-flash-latest';save()};
+$('#model').onchange=e=>{S.model=e.target.value.trim()||'gemini-3.5-flash-lite';save()};
 $('#clr').onclick=()=>{hist=[];saveHist();log.innerHTML='';add('Memory cleared. Fresh start.','j')};
 const send=()=>{const v=$('#txt').value.trim();if(v){$('#txt').value='';handle(v)}};
 $('#go').onclick=send;
