@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#040a12">
+<title>Jarvis</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600&display=swap">
+<style>
+:root{--bg:#040a12;--panel:#0a1623;--ink:#d8f6ff;--dim:#6f8d9b;--arc:#3fe0ff;--warm:#ffb347}
+*{box-sizing:border-box;margin:0}
+html,body{height:100%}
+body{background:radial-gradient(120% 60% at 50% 18%,#0b2233 0,var(--bg) 70%);color:var(--ink);font:500 16px/1.4 Rajdhani,system-ui,sans-serif;display:flex;flex-direction:column;padding:env(safe-area-inset-top) 14px env(safe-area-inset-bottom);overflow:hidden}
+header{display:flex;justify-content:space-between;align-items:center;padding:10px 2px}
+h1{font-size:26px;font-weight:600;letter-spacing:.14em}
+button,input,select{font:inherit;color:inherit}
+#gear{background:none;border:1px solid #1d3647;border-radius:10px;padding:6px 12px;color:var(--dim)}
+#set{display:none;background:var(--panel);border:1px solid #1d3647;border-radius:14px;padding:12px;margin-bottom:8px;gap:10px;flex-direction:column}
+#set.on{display:flex}
+#set label{display:flex;flex-direction:column;font-size:14px;color:var(--dim);gap:4px}
+#set input[type=text],#set input[type=password],#set select{background:#06101a;border:1px solid #1d3647;border-radius:8px;padding:8px;color:var(--ink)}
+#set .row{flex-direction:row;align-items:center;gap:8px}
+#set small{color:var(--dim);font-size:13px}
+#set a{color:var(--arc)}
+#orbwrap{display:grid;place-items:center;padding:6px 0 2px}
+#orb{position:relative;width:176px;height:176px;border:0;background:none;border-radius:50%;cursor:pointer}
+.r{position:absolute;border-radius:50%;border:2px solid transparent}
+.r1{inset:0;border-color:#1f6f86;border-style:dashed;animation:spin 28s linear infinite}
+.r2{inset:16px;border-top-color:var(--arc);border-bottom-color:var(--arc);animation:spin 9s linear infinite reverse}
+.r3{inset:36px;border:3px solid #124a5c;border-left-color:var(--arc);animation:spin 5s linear infinite}
+.core{position:absolute;inset:62px;border-radius:50%;background:radial-gradient(circle,#fff 0,var(--arc) 38%,#0a5a72 100%);box-shadow:0 0 28px 6px #3fe0ff66;transition:transform .3s}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes beat{50%{transform:scale(1.22);box-shadow:0 0 46px 14px #3fe0ff99}}
+body[data-s=listen] .core{animation:beat 1s ease-in-out infinite}
+body[data-s=listen] .r2{animation-duration:3s}
+body[data-s=speak] .core{background:radial-gradient(circle,#fff 0,var(--warm) 40%,#7a4a10 100%);box-shadow:0 0 30px 8px #ffb34766;animation:beat .7s ease-in-out infinite}
+body[data-s=speak] .r3{border-left-color:var(--warm)}
+#stat{text-align:center;min-height:24px;color:var(--dim);font-size:17px;padding:0 8px}
+#log{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding:10px 0;min-height:0}
+.m{max-width:86%;padding:8px 12px;border-radius:12px;background:var(--panel);overflow-wrap:anywhere}
+.m.u{align-self:flex-end;color:var(--dim);border:1px solid #1d3647;background:none}
+.m.j{align-self:flex-start;border-left:3px solid var(--arc)}
+.m a{color:var(--arc)}
+#chips{display:flex;gap:8px;overflow-x:auto;padding:4px 0 8px;flex:none}
+#chips button{flex:none;background:none;border:1px solid #1d3647;border-radius:20px;padding:5px 12px;color:var(--ink)}
+#bar{display:flex;gap:8px;padding-bottom:10px}
+#txt{flex:1;background:var(--panel);border:1px solid #1d3647;border-radius:12px;padding:10px 12px;min-width:0}
+#go{background:var(--arc);color:#03141c;border:0;border-radius:12px;padding:0 18px;font-weight:600}
+:focus-visible{outline:2px solid var(--warm);outline-offset:2px}
+@media (prefers-reduced-motion:reduce){*{animation:none!important}}
+</style>
+</head>
+<body data-s="idle">
+<header><h1>JARVIS</h1><button id="gear">Settings</button></header>
+
+<section id="set">
+  <label>Language
+    <select id="lang">
+      <option value="en-IN">English (India)</option>
+      <option value="en-US">English (US)</option>
+      <option value="hi-IN">हिन्दी Hindi</option>
+      <option value="te-IN">తెలుగు Telugu</option>
+    </select>
+  </label>
+  <label class="row"><input type="checkbox" id="wake"> Always listening: say “Jarvis, …”</label>
+  <label>Gemini API key (free, optional, for smart answers)
+    <input type="password" id="key" placeholder="Paste key" autocomplete="off">
+  </label>
+  <label>Gemini model
+    <input type="text" id="model" autocomplete="off">
+  </label>
+  <small>Get a free key at <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a>. It stays on this phone only.</small>
+</section>
+
+<div id="orbwrap">
+  <button id="orb" aria-label="Tap to talk"><i class="r r1"></i><i class="r r2"></i><i class="r r3"></i><i class="core"></i></button>
+</div>
+<div id="stat" aria-live="polite"></div>
+<div id="log"></div>
+<div id="chips"></div>
+<div id="bar">
+  <input id="txt" type="text" placeholder="Or type a command" autocomplete="off" enterkeyhint="send">
+  <button id="go">Send</button>
+</div>
+
+<script>
+const $=s=>document.querySelector(s);
+const ls=(k,v)=>{try{return v===undefined?localStorage.getItem(k):localStorage.setItem(k,v)}catch(e){}};
+const S={key:'',model:'gemini-2.5-flash',lang:'en-IN',wake:false};
+try{Object.assign(S,JSON.parse(ls('jarvis')||'{}'))}catch(e){}
+const save=()=>ls('jarvis',JSON.stringify(S));
+const log=$('#log'),SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+let rec=null,active=false,busy=false;
+
+function setState(s){
+  document.body.dataset.s=s;
+  if(s==='idle')$('#stat').textContent=S.wake?'Listening for “Jarvis”…':'Tap the orb and speak';
+  if(s==='listen'&&!S.wake)$('#stat').textContent='Listening…';
+  if(s==='listen'&&S.wake)$('#stat').textContent='Say “Jarvis” and a command';
+}
+function add(t,who){const d=document.createElement('div');d.className='m '+who;d.textContent=t;log.append(d);log.scrollTop=log.scrollHeight}
+function say(t,cb){
+  add(t,'j');
+  const done=()=>{setState('idle');cb&&cb()};
+  if(!window.speechSynthesis){done();return}
+  speechSynthesis.cancel();
+  const u=new SpeechSynthesisUtterance(t.replace(/[*#_`]/g,''));
+  u.lang=S.lang;u.rate=1.02;
+  u.onstart=()=>setState('speak');u.onend=u.onerror=done;
+  speechSynthesis.speak(u);
+}
+function open(u,label){
+  const d=document.createElement('div');d.className='m j';
+  const a=document.createElement('a');a.href=u;a.target='_blank';a.rel='noopener';a.textContent='Tap to open '+label;
+  d.append(a);log.append(d);log.scrollTop=log.scrollHeight;
+  window.open(u,'_blank');
+  return 'Opening '+label+'.';
+}
+
+/* ---------- Skills ---------- */
+const JOKES=['Why do programmers prefer dark mode? Because light attracts bugs.','I would tell you a UDP joke, but you might not get it.','There are ten kinds of people: those who understand binary and those who don’t.'];
+const APPS={youtube:'https://www.youtube.com',whatsapp:'https://wa.me/',instagram:'https://www.instagram.com',gmail:'https://mail.google.com',maps:'https://maps.google.com',spotify:'https://open.spotify.com',telegram:'https://t.me/',twitter:'https://x.com',facebook:'https://www.facebook.com',linkedin:'https://www.linkedin.com',github:'https://github.com','play store':'https://play.google.com/store'};
+const hist=[];
+async function ask(q){
+  hist.push({role:'user',parts:[{text:q}]});
+  try{
+    const r=await fetch('https://generativelanguage.googleapis.com/v1beta/models/'+S.model+':generateContent',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','x-goog-api-key':S.key},
+      body:JSON.stringify({
+        systemInstruction:{parts:[{text:'You are JARVIS, a witty, concise voice assistant on an Android phone. Answer in one to three short spoken sentences with no markdown. Reply in the language the user speaks.'}]},
+        contents:hist.slice(-12)
+      })
+    });
+    const j=await r.json();
+    const a=(j.candidates?.[0]?.content?.parts||[]).map(p=>p.text).join('');
+    if(!a){hist.pop();return 'The AI service said: '+(j.error?.message||'no answer')+'.'}
+    hist.push({role:'model',parts:[{text:a}]});
+    return a;
+  }catch(e){hist.pop();return 'I couldn’t reach the AI service. Check your internet connection.'}
+}
+async function route(t){
+  let m;
+  if(/^(hi|hello|hey|yo)\b/.test(t))return 'Hello! How can I help?';
+  if(/who are you|your name/.test(t))return 'I’m Jarvis, your personal assistant, running right on your phone.';
+  if(/what.*time|^time$/.test(t))return 'It’s '+new Date().toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})+'.';
+  if(/\b(date|what day)\b/.test(t)&&t.length<40)return 'Today is '+new Date().toLocaleDateString([],{weekday:'long',day:'numeric',month:'long',year:'numeric'})+'.';
+  if(/battery/.test(t)){
+    if(!navigator.getBattery)return 'I can’t read the battery in this browser.';
+    const b=await navigator.getBattery();
+    return 'Battery is at '+Math.round(b.level*100)+' percent'+(b.charging?' and charging.':'.');
+  }
+  if(m=t.match(/timer (?:for )?(\d+) (second|minute|hour)/)){
+    const n=+m[1],ms=n*{second:1e3,minute:6e4,hour:36e5}[m[2]];
+    setTimeout(()=>say('Your '+n+' '+m[2]+' timer is done.'),ms);
+    return 'Timer set for '+n+' '+m[2]+(n>1?'s':'')+'. Keep this page open.';
+  }
+  if(/joke/.test(t))return JOKES[Math.floor(Math.random()*JOKES.length)];
+  if(/^(calculate|what is|what’s|whats)\s/.test(t)){
+    const ex=t.replace(/^(calculate|what is|what’s|whats)\s+/,'').replace(/plus/g,'+').replace(/minus/g,'-').replace(/multiplied by|times|\bx\b/g,'*').replace(/divided by|over/g,'/');
+    if(/^[\d\s.+\-*/()]+$/.test(ex)&&/\d/.test(ex)){
+      try{return 'That’s '+Math.round(Function('"use strict";return('+ex+')')()*1e6)/1e6+'.'}catch(e){}
+    }
+  }
+  if(m=t.match(/^(?:call|dial) (.+)/)){const n=m[1].replace(/\D/g,'');return open('tel:'+n,n?'the dialer for '+n:'the dialer')}
+  if(m=t.match(/(?:navigate|directions?|take me) (?:to )?(.+)/))return open('https://www.google.com/maps/dir/?api=1&destination='+encodeURIComponent(m[1]),'Maps');
+  if(m=t.match(/^play (.+?)(?: on youtube)?$/))return open('https://www.youtube.com/results?search_query='+encodeURIComponent(m[1]),'YouTube');
+  if(m=t.match(/^(?:open|launch|start) (.+)/)){
+    const k=Object.keys(APPS).find(k=>m[1].includes(k));
+    return k?open(APPS[k],k):'I don’t know that app yet. Try YouTube, WhatsApp, Maps or Gmail.';
+  }
+  if(m=t.match(/^(?:search|google|look up) (?:for )?(.+)/))return open('https://www.google.com/search?q='+encodeURIComponent(m[1]),'search results');
+  if(S.key)return ask(t);
+  return open('https://www.google.com/search?q='+encodeURIComponent(t),'Google results')+' Add a free Gemini key in Settings for spoken answers.';
+}
+
+/* ---------- Voice loop ---------- */
+async function handle(raw,typed){
+  let t=raw.toLowerCase().replace(/[.,!?]/g,'').trim();
+  if(S.wake&&!typed){if(!/jarvis/.test(t))return;t=t.replace(/.*jarvis\s*/,'')}
+  add(raw,'u');
+  if(!t){say('Yes?');return}
+  busy=true;try{rec&&rec.abort()}catch(e){}
+  let r;try{r=await route(t)}catch(e){r='Something went wrong. Please try again.'}
+  say(r,()=>{busy=false;if(S.wake)listen()});
+}
+function listen(){
+  if(!SR){say('Voice input needs Chrome on Android. You can still type commands.');return}
+  if(active)return;
+  speechSynthesis.cancel();
+  rec=new SR();rec.lang=S.lang;rec.interimResults=true;
+  rec.onstart=()=>{active=true;setState('listen')};
+  rec.onresult=e=>{
+    let t='',fin=false;
+    for(let i=e.resultIndex;i<e.results.length;i++){t+=e.results[i][0].transcript;fin=fin||e.results[i].isFinal}
+    $('#stat').textContent=t;
+    if(fin)handle(t);
+  };
+  rec.onerror=e=>{
+    if(e.error==='not-allowed'||e.error==='service-not-allowed'){
+      S.wake=false;$('#wake').checked=false;save();
+      add('Microphone is blocked. Allow it in Chrome’s site settings, and open this page over https.','j');
+    }
+  };
+  rec.onend=()=>{active=false;if(S.wake&&!busy)setTimeout(listen,300);else if(!busy)setState('idle')};
+  try{rec.start()}catch(e){}
+}
+
+/* ---------- UI wiring ---------- */
+$('#orb').onclick=()=>{
+  if(active){S.wake=false;$('#wake').checked=false;save();try{rec.abort()}catch(e){}}
+  else listen();
+};
+$('#gear').onclick=()=>$('#set').classList.toggle('on');
+$('#lang').value=S.lang;$('#key').value=S.key;$('#model').value=S.model;$('#wake').checked=S.wake;
+$('#lang').onchange=e=>{S.lang=e.target.value;save()};
+$('#key').onchange=e=>{S.key=e.target.value.trim();save()};
+$('#model').onchange=e=>{S.model=e.target.value.trim()||'gemini-2.5-flash';save()};
+$('#wake').onchange=e=>{S.wake=e.target.checked;save();if(S.wake)listen();else{try{rec&&rec.abort()}catch(x){}setState('idle')}};
+const send=()=>{const v=$('#txt').value.trim();if(v){$('#txt').value='';handle(v,true)}};
+$('#go').onclick=send;
+$('#txt').onkeydown=e=>{if(e.key==='Enter')send()};
+['What’s the time','Open YouTube','Play lo-fi songs','Timer 5 minutes','Tell me a joke','Battery level'].forEach(c=>{
+  const b=document.createElement('button');b.textContent=c;b.onclick=()=>handle(c,true);$('#chips').append(b);
+});
+add('Online. Tap the orb and give me a command.','j');
+setState('idle');
+if(S.wake)setState('idle');
+</script>
+</body>
+</html>
